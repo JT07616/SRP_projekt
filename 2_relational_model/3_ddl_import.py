@@ -3,13 +3,15 @@ import pandas as pd
 import json
 import requests
 import random
+from pathlib import Path
 from sqlalchemy import Date
 from sqlalchemy import create_engine, Column, Integer, String, Float, ForeignKey, insert
 from sqlalchemy.orm import sessionmaker, declarative_base
 from typing import List, Dict, Any
 
-# Putanja do predprocesirane CSV datoteke
-CSV_FILE_PATH = "atp_matches_processed_80.csv"
+# Putanja do predprocesirane CSV datoteke.
+# Relacijski model se puni iz 80% ociscenih podataka.
+CSV_FILE_PATH = Path(__file__).resolve().parent / "processed" / "atp_matches_processed_80.csv"
 
 # Učitavanje CSV datoteke u dataframe
 df = pd.read_csv(CSV_FILE_PATH, delimiter=',')
@@ -71,7 +73,7 @@ class PlayerMatchStats(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     match_fk = Column(Integer, ForeignKey('match.id'))
     player_fk = Column(Integer, ForeignKey('player.id'))
-    is_winner = Column(Integer, nullable=False) // u tablicu je dodana mjera iswinner koja oznacava pobjenika/gubitnika.
+    is_winner = Column(Integer, nullable=False)   # oznacava pobjednika/gubitnika
     seed = Column(String(10))
     entry = Column(String(10))
     rank = Column(Integer)

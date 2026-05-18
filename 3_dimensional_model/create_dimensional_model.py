@@ -1,5 +1,12 @@
 '''
 Skripta za generiranje dimenzijskog modela podataka -> star schema
+Ova skripta demonstrira cijeli proces:
+1. Konekcija na bazu podataka
+2. Definicija modela (dimenzije i činjenice)
+3. Brisanje starih tablica
+4. Kreiranje novih tablica
+5. ETL proces - punjenje dimenzijskih i fact tablica
+6. Verifikacija rezultata
 '''
 
 import pandas as pd
@@ -7,7 +14,7 @@ from sqlalchemy import create_engine, Column, Integer, BigInteger, String, DateT
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy import text
 
-# Konekcija na bazu
+# Konekcija na bazu podataka
 DATABASE_URL = "mysql+pymysql://root:root@localhost:3306/tenis"
 
 engine = create_engine(DATABASE_URL, echo=False)
@@ -17,12 +24,18 @@ Base = declarative_base()
 
 
 # ========== DEFINICIJA DIMENZIJSKIH I FACT TABLICA ==========
+# U dimenzijskom modelu (star schema):
+# - Dimenzijske tablice (dim_) sadrže opisne atribute - TKO, GDJE, KADA, KONTEKST
+# - Fact tablica (fact_) sadrži mjerljive numeričke vrijednosti - statistike igrača u meču
+# - Surogatni ključevi (*_tk) koriste se za povezivanje fact tablice s dimenzijama
 
 class DimPlayer(Base):
     __tablename__ = 'dim_player'
 
+    # Surogatni ključ dimenzije igrača
     player_tk = Column(BigInteger, primary_key=True, autoincrement=True)
 
+    # Poslovni atributi dimenzije
     player_id = Column(Integer, index=True)
     name = Column(String(100))
     hand = Column(String(5))
@@ -36,8 +49,10 @@ class DimPlayer(Base):
 class DimTournament(Base):
     __tablename__ = 'dim_tournament'
 
+    # Surogatni ključ dimenzije turnira
     tournament_tk = Column(BigInteger, primary_key=True, autoincrement=True)
 
+    # Poslovni atributi dimenzije
     tournament_id = Column(Integer, index=True)
     name = Column(String(100))
     surface = Column(String(20))
@@ -51,8 +66,10 @@ class DimTournament(Base):
 class DimCountry(Base):
     __tablename__ = 'dim_country'
 
+    # Surogatni ključ dimenzije države
     country_tk = Column(BigInteger, primary_key=True, autoincrement=True)
 
+    # Poslovni atributi dimenzije
     country_id = Column(Integer, index=True)
     name = Column(String(45))
     population = Column(Integer)
@@ -62,7 +79,10 @@ class DimCountry(Base):
 class DimDate(Base):
     __tablename__ = 'dim_date'
 
+    # Surogatni ključ vremenske dimenzije
     date_tk = Column(Integer, primary_key=True, autoincrement=True)
+
+    # Hijerarhija datuma omogućuje analizu po danu, mjesecu, kvartalu i godini
     date = Column(Date, nullable=False)
     day = Column(Integer, nullable=False)
     month = Column(Integer, nullable=False)
@@ -74,8 +94,10 @@ class DimDate(Base):
 class DimMatchInfo(Base):
     __tablename__ = 'dim_match_info'
 
+    # Surogatni ključ dimenzije informacija o meču
     match_info_tk = Column(BigInteger, primary_key=True, autoincrement=True)
 
+    # Opisni atributi konteksta meča i statusa igrača u meču
     score = Column(String(100))
     best_of = Column(Integer)
     round = Column(String(20))
@@ -87,8 +109,10 @@ class DimMatchInfo(Base):
 class FactPlayerMatch(Base):
     __tablename__ = 'fact_player_match'
 
+    # Primarni/surogatni ključ fact tablice
     fact_player_match_tk = Column(BigInteger, primary_key=True, autoincrement=True)
 
+    # Strani ključevi prema svim dimenzijama (star schema)
     date_tk = Column(Integer, ForeignKey('dim_date.date_tk'))
     player_tk = Column(BigInteger, ForeignKey('dim_player.player_tk'))
     opponent_player_tk = Column(BigInteger, ForeignKey('dim_player.player_tk'))
@@ -98,7 +122,7 @@ class FactPlayerMatch(Base):
 
     match_num = Column(Integer) # degenerirana dimenzija
      
-    #mjere
+    # Mjere - numeričke vrijednosti koje analiziramo
     ace = Column(Integer)
     double_fault = Column(Integer)
     service_points = Column(Integer)
@@ -121,6 +145,9 @@ with engine.connect() as conn:
 
 
 # ========== BRISANJE STARIH DIMENZIJSKIH TABLICA ==========
+# Tablice se brišu u obrnutom redoslijedu od kreiranja zbog stranih ključeva:
+# prvo fact tablica koja referencira dimenzije, zatim dimenzijske tablice.
+# Ovo je korisno tijekom razvoja jer omogućuje ponovno pokretanje skripte.
 
 print("\nBrišem postojeće dimenzijske tablice...")
 
@@ -144,11 +171,16 @@ print("Tablice kreirane!")
 
 
 # ========== ETL PROCES ==========
+# ETL = Extract (izvlačenje), Transform (transformacija), Load (punjenje)
+# U checkpointu 3 izvor su relacijske tablice iz baze tenis, a cilj je star schema.
 
 print("\nPopunjavam dimenzijske tablice...")
 
 
 # 1. dim_player
+# EXTRACT: dohvat igrača i države iz relacijskog modela
+# TRANSFORM: spajanje igrača s državom i regijom
+# LOAD: spremanje u dim_player
 print("Popunjavam dim_player...")
 
 players_query = """
@@ -171,6 +203,9 @@ print(f"Uneseno {len(df_players)} redaka u dim_player")
 
 
 # 2. dim_tournament
+# EXTRACT: dohvat turnira i države iz relacijskog modela
+# TRANSFORM: spajanje turnira s lokacijskim atributima
+# LOAD: spremanje u dim_tournament
 print("Popunjavam dim_tournament...")
 
 tournaments_query = """
@@ -193,6 +228,9 @@ print(f"Uneseno {len(df_tournaments)} redaka u dim_tournament")
 
 
 # 3. dim_country
+# EXTRACT: dohvat država iz relacijskog modela
+# TRANSFORM: zadržavanje poslovnih atributa države
+# LOAD: spremanje u dim_country
 print("Popunjavam dim_country...")
 
 countries_query = """
@@ -210,6 +248,9 @@ print(f"Uneseno {len(df_countries)} redaka u dim_country")
 
 
 # 4. dim_date
+# EXTRACT: dohvat jedinstvenih datuma turnira
+# TRANSFORM: rastavljanje datuma na dan, mjesec, kvartal i godinu
+# LOAD: spremanje u dim_date
 print("Popunjavam dim_date...")
 
 dates_query = """
@@ -236,6 +277,9 @@ print(f"Uneseno {len(df_dates_final)} redaka u dim_date")
 
 
 # 5. dim_match_info
+# EXTRACT: dohvat rezultata, runde i statusa igrača u meču
+# TRANSFORM: jedinstvene kombinacije opisa meča
+# LOAD: spremanje u dim_match_info
 print("Popunjavam dim_match_info...")
 
 match_info_query = """
@@ -256,6 +300,8 @@ print(f"Uneseno {len(df_match_info)} redaka u dim_match_info")
 
 
 # ========== PUNJENJE FACT TABLICE ==========
+# Fact tablica povezuje sve dimenzije i sadrži mjere/statistike igrača u meču.
+# Jedan meč daje dva zapisa u player_match_stats: pobjednik i poraženi igrač.
 
 print("\nPopunjavam fact_player_match...")
 
@@ -281,14 +327,14 @@ INSERT INTO fact_player_match (
     minutes
 )
 SELECT
-    dd.date_tk,
-    dp.player_tk,
+    dd.date_tk, -- surogat datuma
+    dp.player_tk, -- surogat igrača
     dop.player_tk AS opponent_player_tk,
-    dt.tournament_tk,
-    dc.country_tk,
-    dmi.match_info_tk,
-    m.match_num,
-    pms.ace,
+    dt.tournament_tk, -- surogat turnira
+    dc.country_tk, -- surogat države
+    dmi.match_info_tk, -- surogat opisa meča
+    m.match_num, -- degenerirana dimenzija
+    pms.ace, -- mjere/statistike igrača
     pms.double_fault,
     pms.service_points,
     pms.first_in,
@@ -300,6 +346,7 @@ SELECT
     pms.rank_points,
     m.minutes
 FROM player_match_stats pms
+-- Svaki JOIN povezuje izvorne relacijske tablice s dimenzijama preko prirodnih ključeva
 INNER JOIN `match` m ON pms.match_fk = m.id
 INNER JOIN tournament t ON m.tournament_fk = t.id
 INNER JOIN player p ON pms.player_fk = p.id
