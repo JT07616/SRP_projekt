@@ -1,4 +1,4 @@
-from pyspark.sql.functions import col, row_number, to_date, trim, when
+from pyspark.sql.functions import col, lit, row_number, to_date, trim, when
 from pyspark.sql.window import Window
 
 
@@ -36,6 +36,7 @@ def _build_mysql_player_rows(raw_data):
             trim(col("pms.seed")).alias("seed"),
             trim(col("pms.entry")).alias("entry"),
             col("pms.rank").cast("int").alias("rank"),
+            col("pms.is_winner").cast("int").alias("is_winner"),
             col("m.match_num").cast("int").alias("match_num"),
             col("pms.ace").cast("int").alias("ace"),
             col("pms.double_fault").cast("int").alias("double_fault"),
@@ -71,6 +72,7 @@ def _build_csv_player_rows(csv_matches_df):
         trim(col("winner_seed")).alias("seed"),
         trim(col("winner_entry")).alias("entry"),
         col("winner_rank").cast("int").alias("rank"),
+        lit(1).cast("int").alias("is_winner"),
         col("match_num").cast("int").alias("match_num"),
         col("w_ace").cast("int").alias("ace"),
         col("w_df").cast("int").alias("double_fault"),
@@ -97,6 +99,7 @@ def _build_csv_player_rows(csv_matches_df):
         trim(col("loser_seed")).alias("seed"),
         trim(col("loser_entry")).alias("entry"),
         col("loser_rank").cast("int").alias("rank"),
+        lit(0).cast("int").alias("is_winner"),
         col("match_num").cast("int").alias("match_num"),
         col("l_ace").cast("int").alias("ace"),
         col("l_df").cast("int").alias("double_fault"),
@@ -172,6 +175,7 @@ def transform_player_match_fact(
             col("dt.tournament_tk"),
             col("dc.country_tk"),
             col("dmi.match_info_tk"),
+            col("f.is_winner"),
             col("f.match_num"),
             col("f.ace"),
             col("f.double_fault"),
@@ -202,6 +206,7 @@ def transform_player_match_fact(
         "tournament_tk",
         "country_tk",
         "match_info_tk",
+        "is_winner",
         "match_num",
         "ace",
         "double_fault",
